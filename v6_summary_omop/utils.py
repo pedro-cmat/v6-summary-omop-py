@@ -32,8 +32,8 @@ def compare_with_minimum(value):
     count_minimum = int(os.getenv(COUNT_MINIMUM) or COUNT_MINIMUM_DEFAULT)
     return value if value > count_minimum else f"< {count_minimum}"
 
-def parse_sql_condition(sql_condition, where_condition=False):
+def parse_sql_condition(cohort_ids, where_condition=False):
     """ Parse the sql condition to insert in another sql statement.
     """
-    return f"""{"WHERE" if where_condition else "AND"} {sql_condition}""" \
-        if sql_condition else ""
+    return f"""{"WHERE" if where_condition else "AND"} id IN {cohort_ids}""" \
+        if cohort_ids else ""

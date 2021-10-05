@@ -46,7 +46,6 @@ COHORT = "COHORT"
 COHORT_DEFINITION = "definition"
 OPERATOR = "operator"
 VALUE = "value"
-ID_COLUMN = "id_column"
 
 PERSON_ID = "person_id"
 PERSON_TABLE = "person"

@@ -59,9 +59,10 @@ def master(client, db_client, columns = [], functions = None, cohort = None):
         return parse_error("Invalid format for the summary input argument")
 
     if cohort:
-        if not check_keys_in_dict([COHORT_DEFINITION, TABLE, ID_COLUMN], cohort) or \
+        if not check_keys_in_dict([COHORT_DEFINITION], cohort) or \
             len(cohort[COHORT_DEFINITION]) < 1 or \
-            not all([check_keys_in_dict([VARIABLE, OPERATOR, VALUE], definition) for definition in cohort[COHORT_DEFINITION]]):
+            not all([check_keys_in_dict([VARIABLE, OPERATOR, VALUE, TABLE], definition) \
+                for definition in cohort[COHORT_DEFINITION]]):
             return parse_error("Invalid cohort definition for the cohort input argument")
 
 
@@ -103,7 +104,7 @@ def master(client, db_client, columns = [], functions = None, cohort = None):
     info("Check if any exception occurred")
     if any([ERROR in result for result in results]):
         warn("Encountered an error, please review the parameters")
-        return [result[ERROR] for result in results if ERROR in result]
+        return [result for result in results if ERROR in result]
 
     # process the output
     info("Process the node results")
@@ -153,17 +154,17 @@ def RPC_summary(db_client, columns, cohort):
     # Execute the necessary SQL queries and aggregate the results
     summary = {}
     # Process the cohort if included in the request
-    sql_condition = None
-    # if cohort:
-    #     try:
-    #         (summary[COHORT], sql_condition) = cohort_finder(cohort, db_client)
-    #     except Exception as error:
-    #         return parse_error(f"Error while executing the sql query for the cohort analysis {str(error)}")
-
-    if not cohort or sql_condition:
+    cohort_ids = None
+    if cohort:
         try:
-            summary.update(summary_results(columns, db_client))
+            (summary[COHORT], cohort_ids) = cohort_finder(cohort, db_client)
         except Exception as error:
-            return parse_error(f"Error while executing the sql query for the summary.", error)
+            return parse_error("Error while executing the sql query for the cohort analysis.", error)
+
+    if not cohort or cohort_ids:
+        try:
+            summary.update(summary_results(columns, cohort_ids, db_client))
+        except Exception as error:
+            return parse_error("Error while executing the sql query for the summary.", error)
 
     return summary

@@ -1,30 +1,39 @@
 import os
 
 from v6_summary_omop.constants import *
-from v6_summary_omop.utils import run_sql, compare_with_minimum, parse_sql_condition
-from v6_summary_omop.sql_functions import cohort_count
+from v6_summary_omop.utils import compare_with_minimum, run_sql, parse_sql_condition
 
-def create_table_statement(table, variable):
+def get_database_name(db_client):
+    """ Retrieve the database name.
+    """
+    return run_sql(db_client, "SELECT current_database();")[0]
+
+def create_table_statement(table, variable, return_value=True, condition=None):
     """ Create the table statement so that all tables become generic.
     """
     sql_statement = ""
     if table.lower() == OBSERVATION_TABLE:
-        sql_statement = f"""SELECT observation_id AS id, concat(value_as_string, concept_name) AS 
-            value FROM OBSERVATION AS o LEFT JOIN CONCEPT AS c ON c.concept_id = o.value_as_concept_id 
-            WHERE o.observation_concept_id = {variable}
+        value_statement = f", concat(value_as_string, concept_name) AS {VALUE}"
+        sql_statement = f"""SELECT person_id AS id {value_statement if return_value else ""} 
+            FROM OBSERVATION AS o LEFT JOIN CONCEPT AS c ON c.concept_id = o.value_as_concept_id 
+            WHERE o.observation_concept_id = {variable} {f"AND {condition}" if condition else ""}
         """
     elif table.lower() == MEASUREMENT_TABLE:
-        sql_statement = f"""SELECT measurement_id AS id, concat(value_as_number, concept_name) AS 
-            value FROM MEASUREMENT AS m LEFT JOIN CONCEPT AS c ON c.concept_id = m.value_as_concept_id 
-            WHERE measurement_concept_id = {variable}
+        value_statement = f", concat(value_as_number, concept_name) AS {VALUE}"
+        sql_statement = f"""SELECT person_id AS id, {value_statement if return_value else ""} 
+            FROM MEASUREMENT AS m LEFT JOIN CONCEPT AS c ON c.concept_id = m.value_as_concept_id 
+            WHERE measurement_concept_id = {variable} {f"AND {condition}" if condition else ""}
         """
     elif table.lower() == CONDITION_TABLE:
-        sql_statement = f"""SELECT condition_occurrence_id AS id, True AS value FROM CONDITION_OCCURRENCE 
-            WHERE condition_concept_id = {variable} UNION ALL SELECT observation_id AS id, False AS value 
+        sql_statement = f"""SELECT person_id AS id {", True AS {VALUE}" if return_value else ""} 
+            FROM CONDITION_OCCURRENCE WHERE condition_concept_id = {variable} 
+            UNION ALL SELECT person_id AS id {", False AS {VALUE}" if return_value else ""} 
             FROM OBSERVATION WHERE observation_concept_id = {variable}
         """
     elif table.lower() == PERSON_TABLE:
-        sql_statement = f"""SELECT person_id AS id, "{variable}" AS value FROM PERSON"""
+        value_statement = f', "{variable}" AS {VALUE}'
+        sql_statement = f"""SELECT person_id AS id {value_statement if return_value else ""} 
+            FROM PERSON {f"WHERE {condition}" if condition else ""}"""
     else:
         raise Exception(f"Non supported table requested: {table}")
     return sql_statement
@@ -33,35 +42,77 @@ def table_count(table_sql, db_client):
     """ Retireve the number of records in a table
     """
     sql_statement = f"""SELECT current_database(), COUNT("id") 
-        FROM ({table_sql}) AS t WHERE "value" IS NOT NULL;"""
+        FROM ({table_sql}) AS t WHERE "{VALUE}" IS NOT NULL;"""
     result = run_sql(db_client, sql_statement)
     return result
+
+def cohort_selection(definition, db_client):
+    """ Select the persons id that fall into the citeria provided
+        for thr cohort.
+    """
+    sql_condition = []
+    for component in definition:
+        value = VALUE in component
+        if component[TABLE].lower() == OBSERVATION_TABLE:
+            condition = ""
+            if value:
+                if isinstance(component[VALUE], str):
+                    condition = f"value_as_string {component[OPERATOR]} {component[VALUE]}"
+                else:
+                    condition = f"value_as_number {component[OPERATOR]} {component[VALUE]}"
+            else:
+                condition = f"concept_id {component[OPERATOR]} {component[CONCEPT_ID]}"
+            sql_condition.append(create_table_statement(
+                OBSERVATION_TABLE,
+                component[VARIABLE],
+                return_value=False,
+                condition=condition
+            ))
+        elif component[TABLE].lower() == MEASUREMENT_TABLE:
+            sql_condition.append(create_table_statement(
+                MEASUREMENT_TABLE,
+                component[VARIABLE],
+                return_value=False,
+                condition=f"value_as_number {component[OPERATOR]} {component[VALUE]}" \
+                    if value else f"concept_id {component[OPERATOR]} {component[CONCEPT_ID]}"
+            ))
+        elif component[TABLE] == CONDITION_TABLE:
+            # TODO: complete for Condition
+            pass
+        elif component[TABLE].lower() == PERSON_TABLE:
+            sql_condition.append(create_table_statement(
+                PERSON_TABLE,
+                component[VARIABLE],
+                return_value=False,
+                condition=f"""{component[VARIABLE]} {component[OPERATOR]} {component[VALUE]}"""
+            ))
+        else:
+            raise Exception(f"Non supported table requested for cohort: {component[TABLE]}")
+    result = run_sql(
+       db_client,
+       f"""SELECT t.id FROM ({" INTERSECT ".join(sql_condition)}) AS t;""",
+       fetch_all=True
+    )
+    return tuple([person_id[0] for person_id in result])
 
 def cohort_finder(cohort, db_client):
     """ Retrieve the results for the cohort finder option
     """
-    id_column = ID_COLUMN in cohort and cohort[ID_COLUMN]
-    sql_statement, sql_condition = cohort_count(
-        id_column,
-        cohort[COHORT_DEFINITION],
-        cohort[TABLE],
-    )
     # Check if the number of records in the table is enough
-    count = table_count(cohort[TABLE], id_column, sql_condition, db_client)
-    if int(count[1]) >= int(os.getenv(TABLE_MINIMUM) or TABLE_MINIMUM_DEFAULT):
-        # If the total count for the cohort is below the accepted threshold
-        # then the information won't be sent to the mater node
-        result = run_sql(db_client, sql_statement)
-        return ((result[0], compare_with_minimum(result[1])), sql_condition)
-    else:
+    person_ids = cohort_selection(cohort[COHORT_DEFINITION], db_client)
+    # If the total count for the cohort is below the accepted threshold
+    # then the information won't be sent to the master node
+    if len(person_ids) >= int(os.getenv(TABLE_MINIMUM) or TABLE_MINIMUM_DEFAULT):
         return (
-            {
-                WARNING: f"Not enough records in database {count[0]}."
-            }, 
-            None
+            (get_database_name(db_client), compare_with_minimum(len(person_ids))),
+            person_ids
         )
+    else:
+        return ({
+                WARNING: f"Not enough records in the database."
+        }, None)
 
-def summary_results(columns, db_client):
+def summary_results(columns, cohort_ids, db_client):
     """ Retrieve the summary results for the requested functions
     """
     summary = {}
@@ -82,9 +133,9 @@ def summary_results(columns, db_client):
                 sql_functions = ""
                 for function in column[REQUIRED_FUNCTIONS]:
                     if function.upper() not in sql_functions:
-                        sql_functions += f"""{' ,' if sql_functions else ''}{function.upper()}(CAST("value" AS numeric))"""
+                        sql_functions += f"""{' ,' if sql_functions else ''}{function.upper()}(CAST("{VALUE}" AS numeric))"""
                 sql_statement = f"""SELECT {sql_functions} FROM ({table_sql}) AS t WHERE 
-                    "value" IS NOT NULL;"""
+                    "{VALUE}" IS NOT NULL {parse_sql_condition(cohort_ids)};"""
                 # execute the sql query and retrieve the results
                 result = run_sql(db_client, sql_statement)
                 # parse the results
@@ -93,7 +144,7 @@ def summary_results(columns, db_client):
 
             if REQUIRED_METHODS in column:
                 for method in column[REQUIRED_METHODS]:
-                    sql_statement = method[CALL](table_sql, column)
+                    sql_statement = method[CALL](table_sql, cohort_ids, column)
                     summary[column[VARIABLE]][method[NAME]] = run_sql(
                         db_client, sql_statement, fetch_all = method[FETCH]==FETCH_ALL
                    )
