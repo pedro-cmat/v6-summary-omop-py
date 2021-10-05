@@ -20,14 +20,14 @@ def create_table_statement(table, variable, return_value=True, condition=None):
         """
     elif table.lower() == MEASUREMENT_TABLE:
         value_statement = f", concat(value_as_number, concept_name) AS {VALUE}"
-        sql_statement = f"""SELECT person_id AS id, {value_statement if return_value else ""} 
+        sql_statement = f"""SELECT person_id AS id {value_statement if return_value else ""} 
             FROM MEASUREMENT AS m LEFT JOIN CONCEPT AS c ON c.concept_id = m.value_as_concept_id 
             WHERE measurement_concept_id = {variable} {f"AND {condition}" if condition else ""}
         """
     elif table.lower() == CONDITION_TABLE:
-        sql_statement = f"""SELECT person_id AS id {", True AS {VALUE}" if return_value else ""} 
+        sql_statement = f"""SELECT person_id AS id {f", True AS {VALUE}" if return_value else ""} 
             FROM CONDITION_OCCURRENCE WHERE condition_concept_id = {variable} 
-            UNION ALL SELECT person_id AS id {", False AS {VALUE}" if return_value else ""} 
+            UNION ALL SELECT person_id AS id {f", False AS {VALUE}" if return_value else ""} 
             FROM OBSERVATION WHERE observation_concept_id = {variable}
         """
     elif table.lower() == PERSON_TABLE:
