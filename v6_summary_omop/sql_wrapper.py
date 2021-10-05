@@ -77,8 +77,10 @@ def cohort_selection(definition, db_client):
                     if value else f"concept_id {component[OPERATOR]} {component[CONCEPT_ID]}"
             ))
         elif component[TABLE] == CONDITION_TABLE:
-            # TODO: complete for Condition
-            pass
+            sql_condition.append(f"""
+                SELECT id FROM ({create_table_statement(CONDITION_TABLE, component[VARIABLE])}) 
+                AS t WHERE {VALUE} {component[OPERATOR]} {component[VALUE]}
+            """)
         elif component[TABLE].lower() == PERSON_TABLE:
             sql_condition.append(create_table_statement(
                 PERSON_TABLE,
