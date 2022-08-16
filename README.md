@@ -94,8 +94,8 @@ input_ = {
         "functions": [],
         "columns": [
             {
-                "variable": "age",
-                "table": "records",
+                "variable": "year_of_birth",
+                "table": "PERSON",
                 "functions": ["histogram"],
                 "BIN_WIDTH": 4
             }
@@ -118,8 +118,8 @@ input_ = {
         "functions": [],
         "columns": [
             {
-                "variable": "age",
-                "table": "records",
+                "variable": "year_of_birth",
+                "table": "PERSON",
                 "functions": ["boxplot"],
                 "IQR_THRESHOLD": 2
             }
@@ -142,23 +142,18 @@ input_ = {
         "cohort": {
             "definition": [
                 {
-                    "variable": "Age",
+                    "variable": "year_of_birth",
                     "operator": ">=",
-                    "value": 75
+                    "value": 1975,
+                    "table": "Person",
                 },
                 {
-                    "variable": "deadstatus.event",
+                    "variable": "381316",
                     "operator": "=",
-                    "value": 1
+                    "value": 1,
+                    "table": "condition_occurrence",
                 },
-                {
-                    "variable": "Histology",
-                    "operator": "IN",
-                    "value": "('large_cell', 'scc')"
-                }
             ],
-            "table": "records",
-            "id_column": "ID"
         }
     }
 }
@@ -176,18 +171,17 @@ input_ = {
         "cohort": {
             "definition": [
                 {
-                    "variable": "deadstatus.event",
+                    "variable": "381316",
                     "operator": "=",
-                    "value": 1
+                    "value": 1,
+                    "table": "condition_occurrence",
                 }
             ],
-            "table": "records",
-            "id_column": "ID"
         },
         "columns": [
             {
-                "variable": "age",
-                "table": "records",
+                "variable": "year_of_birth",
+                "table": "PERSON",
                 "functions": ["avg"]
             }
         ]
