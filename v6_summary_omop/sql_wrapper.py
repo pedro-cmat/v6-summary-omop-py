@@ -25,9 +25,9 @@ def create_table_statement(table, variable, return_value=True, condition=None):
             WHERE measurement_concept_id = {variable} {f"AND {condition}" if condition else ""}
         """
     elif table.lower() == CONDITION_TABLE:
-        sql_statement = f"""SELECT person_id AS id {f", True AS {VALUE}" if return_value else ""} 
+        sql_statement = f"""SELECT person_id AS id {f", 1 AS {VALUE}" if return_value else ""} 
             FROM CONDITION_OCCURRENCE WHERE condition_concept_id = {variable} 
-            UNION ALL SELECT person_id AS id {f", False AS {VALUE}" if return_value else ""} 
+            UNION ALL SELECT person_id AS id {f", 0 AS {VALUE}" if return_value else ""} 
             FROM OBSERVATION WHERE observation_concept_id = {variable}
         """
     elif table.lower() == PERSON_TABLE:

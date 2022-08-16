@@ -8,7 +8,7 @@ from v6_summary_omop.mapping import AGGREGATORS, FUNCTION_MAPPING
 from v6_summary_omop.sql_wrapper import cohort_finder, summary_results
 from v6_summary_omop.utils import *
 
-def master(client, db_client, columns = [], functions = None, cohort = None):
+def master(client, db_client, columns = [], functions = None, cohort = None, org_ids = None):
     """
     Master algorithm to compute a summary of the federated datasets.
 
@@ -80,7 +80,9 @@ def master(client, db_client, columns = [], functions = None, cohort = None):
     # obtain organizations that are within my collaboration
     info("Obtaining the organizations in the collaboration")
     organizations = client.get_organizations_in_my_collaboration()
-    ids = [organization.get("id") for organization in organizations]
+    ids = [organization.get("id") for organization in organizations if \
+        not org_ids or organization.get("id") in org_ids]
+    info(f"Sending the algorithm to the following organizations: {' ,'.join(str(id) for id in ids)}")
 
     # collaboration and image is stored in the key, so we do not need
     # to specify these
@@ -159,12 +161,12 @@ def RPC_summary(db_client, columns, cohort):
         try:
             (summary[COHORT], cohort_ids) = cohort_finder(cohort, db_client)
         except Exception as error:
-            return parse_error("Error while executing the sql query for the cohort analysis.", error)
+            return parse_error("Error while executing the sql query for the cohort analysis.", str(error))
 
     if not cohort or cohort_ids:
         try:
             summary.update(summary_results(columns, cohort_ids, db_client))
         except Exception as error:
-            return parse_error("Error while executing the sql query for the summary.", error)
+            return parse_error("Error while executing the sql query for the summary.", str(error))
 
     return summary

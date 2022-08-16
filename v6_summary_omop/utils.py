@@ -1,17 +1,16 @@
 """ Utility functions.
 """
+from decimal import Decimal
 import os
 
 from v6_summary_omop.constants import *
 
-def run_sql(db_client, sql_statement, parameters=None, fetch_all=False):
+def run_sql(db_client, sql_statement, parameters=None, fetch_all=False, convert_type=True):
     """ Execute the sql query and retrieve the results
     """
     db_client.execute(sql_statement, parameters)
-    if fetch_all:
-        return db_client.fetchall()
-    else:
-        return db_client.fetchone()
+    results = db_client.fetchall() if fetch_all else db_client.fetchone()
+    return parse_decimal_to_float(results) if convert_type else results
 
 def parse_error(error_message, error=None):
     """ Parse an error message.
@@ -37,3 +36,16 @@ def parse_sql_condition(cohort_ids, where_condition=False):
     """
     return f"""{"WHERE" if where_condition else "AND"} id IN {cohort_ids}""" \
         if cohort_ids else ""
+
+def parse_decimal_to_float(values):
+    """ Parse decimals to float in a list.
+    """
+    parsed_list = []
+    for item in values:
+        if isinstance(item, list) or isinstance(item, tuple):
+            parsed_list.append(parse_decimal_to_float(item))
+        elif isinstance(item, Decimal):
+            parsed_list.append(float(item))
+        else:
+            parsed_list.append(item)
+    return parsed_list
