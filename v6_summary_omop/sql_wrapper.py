@@ -55,7 +55,9 @@ def cohort_selection(definition, db_client):
         value = VALUE in component
         if component[TABLE].lower() == OBSERVATION_TABLE:
             condition = ""
-            if value:
+            if VALUE_AS_CONCEPT_ID in component:
+                condition = f"value_as_concept_id {component[OPERATOR]} {int(component[CONCEPT_ID])}"
+            elif value:
                 if isinstance(component[VALUE], str):
                     condition = f"value_as_string {component[OPERATOR]} {component[VALUE]}"
                 else:
